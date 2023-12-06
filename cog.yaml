@@ -4,6 +4,7 @@
 build:
   # set to true if your model requires a GPU
   gpu: true
+  cuda: "12.1"
 
   # a list of ubuntu apt packages to install
   system_packages:
@@ -14,11 +15,11 @@ build:
 
   # a list of packages in the format <package-name>==<version>
   python_packages:
-    - "torch"
-    - "torchvision"
-    - "av"
-    - "scipy"
-    - "opencv-python"
+    - "torch==2.1.0"
+    - "torchvision==0.16.0"
+    - "av==11.0.0"
+    - "scipy==1.11.4"
+    - "opencv-python==4.8.1.78"
 
   # commands run after the environment is setup
   run:
