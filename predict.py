@@ -18,7 +18,7 @@ from densepose.vis.densepose_results import (
 from densepose.vis.extractor import DensePoseResultExtractor
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
-
+import subprocess
 
 def densepose(im, predictor):
     width, height = im.shape[1], im.shape[0]
@@ -82,6 +82,12 @@ class Predictor(BasePredictor):
                     out_frame = av.VideoFrame.from_ndarray(out, format="bgr24")
                     for packet in stream_out.encode(out_frame):
                         target_container.mux(packet)
+            # Re-encode the video to a widely compatible format using ffmpeg
+            reencoded_out_path = out_path + ".reencoded.mp4"
+            subprocess.check_output(
+                ["ffmpeg", "-i", str(out_path), "-c:v", "libx264", "-preset", "slow", "-crf", "22", "-pix_fmt", "yuv420p", str(reencoded_out_path)]
+            )
+            shutil.move(reencoded_out_path, out_path)
             return Path(out_path)
         else:
             raise ValueError("Input must be an image or video")
