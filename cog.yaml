@@ -1,0 +1,30 @@
+# Configuration for Cog ⚙️
+# Reference: https://github.com/replicate/cog/blob/main/docs/yaml.md
+
+build:
+  # set to true if your model requires a GPU
+  gpu: true
+
+  # a list of ubuntu apt packages to install
+  system_packages:
+    - "ffmpeg"
+
+  # python version in the form '3.11' or '3.11.4'
+  python_version: "3.11"
+
+  # a list of packages in the format <package-name>==<version>
+  python_packages:
+    - "torch"
+    - "torchvision"
+    - "av"
+    - "scipy"
+    - "opencv-python"
+
+  # commands run after the environment is setup
+  run:
+    - "git clone https://github.com/facebookresearch/detectron2.git"
+    - "pip install ./detectron2"
+    - "curl -O https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_s1x/165712039/model_final_162be9.pkl"
+
+# predict.py defines how predictions are run on your model
+predict: "predict.py:Predictor"

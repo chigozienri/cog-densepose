@@ -1,0 +1,30 @@
+name: Lint
+
+on:
+  push:
+    branches: ['*']
+
+jobs:
+  run-linters:
+    name: Run linters
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install Python dependencies and run linters
+        run: |
+          pip install black isort
+          black .
+          isort --profile "black" .
+
+      - name: Run linters
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: 'Applied automatic fixes from linters'
