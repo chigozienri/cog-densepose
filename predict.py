@@ -3,37 +3,58 @@
 
 import os
 import shutil
-import subprocess
 import tempfile
 
 import cv2
 from cog import BasePredictor, Input, Path
 
-from main import densepose
+import cv2
+import numpy as np
+import torch
+from densepose import add_densepose_config
+from densepose.vis.densepose_results import (
+    DensePoseResultsFineSegmentationVisualizer as Visualizer,
+)
+from densepose.vis.extractor import DensePoseResultExtractor
+from detectron2.config import get_cfg
+from detectron2.engine import DefaultPredictor
 
+def densepose(im, predictor):
+    width, height = im.shape[1], im.shape[0]
+
+    with torch.no_grad():
+        outputs = predictor(im)["instances"]
+
+    results = DensePoseResultExtractor()(outputs)
+    # MagicAnimate uses the Viridis colormap for their training data
+    cmap = cv2.COLORMAP_VIRIDIS
+    # Visualizer outputs black for background, but we want the 0 value of
+    # the colormap, so we initialize the array with that value
+    arr = cv2.applyColorMap(np.zeros((height, width), dtype=np.uint8), cmap)
+    out = Visualizer(alpha=1, cmap=cmap).visualize(arr, results)
+    return out
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
         """Load the model into memory to make running multiple predictions efficient"""
-        # self.model = torch.load("./weights.pth")
+        cfg = get_cfg()
+        add_densepose_config(cfg)
+        cfg.merge_from_file(
+            "/detectron2/projects/DensePose/configs/densepose_rcnn_R_50_FPN_s1x.yaml"
+        )
+        cfg.MODEL.WEIGHTS = "/model_final_162be9.pkl"
+        self.predictor = DefaultPredictor(cfg)
 
     def predict(
         self,
-        image: Path = Input(description="Input image"),
+        input: Path = Input(description="Input image"),
     ) -> Path:
         """Run a single prediction on the model"""
         tempdir = tempfile.mkdtemp()
         in_path = os.path.join(tempdir, "image.png")
         out_path = os.path.join(tempdir, "image_dp_segm.png")
-        shutil.copy(image, in_path)
-        # tempdir_contents = set(os.listdir(tempdir))
-        out = densepose(in_path)
+        shutil.copy(input, in_path)
+        im = cv2.imread(in_path)
+        out = densepose(im, self.predictor)
         cv2.imwrite(out_path, out)
-        # subprocess.check_output(
-        #     f"python /detectron2/projects/DensePose/apply_net.py show /detectron2/projects/DensePose/configs/densepose_rcnn_R_50_FPN_s1x.yaml /model_final_162be9.pkl {in_path} dp_segm --output {out_path}",
-        #     shell=True,
-        # )
-        # Weird workaround because the output file is not named correctly, it has a .0001 inserted before the extension
-        # filename = list(set(os.listdir(tempdir)).difference(tempdir_contents))[0]
-        # out_path = os.path.join(tempdir, filename)
         return Path(out_path)
