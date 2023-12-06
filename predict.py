@@ -1,16 +1,16 @@
 # Prediction interface for Cog ⚙️
 # https://github.com/replicate/cog/blob/main/docs/python.md
 
+import mimetypes
 import os
 import shutil
 import tempfile
 
-import cv2
-from cog import BasePredictor, Input, Path
-
+import av
 import cv2
 import numpy as np
 import torch
+from cog import BasePredictor, Input, Path
 from densepose import add_densepose_config
 from densepose.vis.densepose_results import (
     DensePoseResultsFineSegmentationVisualizer as Visualizer,
@@ -18,6 +18,7 @@ from densepose.vis.densepose_results import (
 from densepose.vis.extractor import DensePoseResultExtractor
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
+
 
 def densepose(im, predictor):
     width, height = im.shape[1], im.shape[0]
@@ -34,6 +35,7 @@ def densepose(im, predictor):
     out = Visualizer(alpha=1, cmap=cmap).visualize(arr, results)
     return out
 
+
 class Predictor(BasePredictor):
     def setup(self) -> None:
         """Load the model into memory to make running multiple predictions efficient"""
@@ -47,14 +49,39 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        input: Path = Input(description="Input image"),
+        input: Path = Input(description="Input image or video"),
     ) -> Path:
         """Run a single prediction on the model"""
         tempdir = tempfile.mkdtemp()
-        in_path = os.path.join(tempdir, "image.png")
-        out_path = os.path.join(tempdir, "image_dp_segm.png")
-        shutil.copy(input, in_path)
-        im = cv2.imread(in_path)
-        out = densepose(im, self.predictor)
-        cv2.imwrite(out_path, out)
-        return Path(out_path)
+        # Check if input is image or video using the file mimetype
+        mimetype, _ = mimetypes.guess_type(str(input))
+        if mimetype and mimetype.startswith("image/"):
+            # We have an image
+            in_path = os.path.join(tempdir, "image.png")
+            out_path = os.path.join(tempdir, "image_dp_segm.png")
+            shutil.copy(input, in_path)
+            im = cv2.imread(in_path)
+            out = densepose(im, self.predictor)
+            cv2.imwrite(out_path, out)
+            return Path(out_path)
+        elif mimetype and mimetype.startswith("video/"):
+            # We have a video
+            in_path = os.path.join(tempdir, "input_video.mp4")
+            out_path = os.path.join(tempdir, "video_dp_segm.mp4")
+            shutil.copy(input, in_path)
+            container = av.open(in_path)
+            stream = container.streams.video[0]
+            with av.open(out_path, mode="w") as target_container:
+                stream_out = target_container.add_stream("mpeg4", rate=25)
+                stream_out.width = stream.width
+                stream_out.height = stream.height
+                for frame in container.decode(stream):
+                    pil_image = frame.to_image()
+                    cv2_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+                    out = densepose(cv2_image, self.predictor)
+                    out_frame = av.VideoFrame.from_ndarray(out, format="bgr24")
+                    for packet in stream_out.encode(out_frame):
+                        target_container.mux(packet)
+            return Path(out_path)
+        else:
+            raise ValueError("Input must be an image or video")
