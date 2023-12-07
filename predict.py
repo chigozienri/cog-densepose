@@ -82,7 +82,9 @@ def original_urls_to_modelmap(original_urls):
             ).split("/")[:-1]
         )
         modelmap[shortname]["model_filename"] = url.split("/")[-1]
-        modelmap[shortname]["config_filename"] = url.split("/")[-3] + ".yaml"
+        modelmap[shortname]["config_filename"] = (
+            ("evolution/" if "evolution" in url else "") + url.split("/")[-3] + ".yaml"
+        )
     return modelmap
 
 
