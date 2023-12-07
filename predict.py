@@ -14,14 +14,18 @@ import torch
 from cog import BasePredictor, Input, Path
 from densepose import add_densepose_config
 from densepose.vis.densepose_results import (
-    DensePoseResultsFineSegmentationVisualizer as Visualizer,
+    DensePoseResultsCustomContourVisualizer,
+    DensePoseResultsFineSegmentationVisualizer,
+    DensePoseResultsMplContourVisualizer,
+    DensePoseResultsUVisualizer,
+    DensePoseResultsVVisualizer,
 )
 from densepose.vis.extractor import DensePoseResultExtractor
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 
 
-def densepose(im, predictor, cmap=cv2.COLORMAP_VIRIDIS, base_image=None):
+def densepose(im, predictor, visualizer, cmap=cv2.COLORMAP_VIRIDIS, base_image=None):
     width, height = im.shape[1], im.shape[0]
 
     with torch.no_grad():
@@ -34,7 +38,7 @@ def densepose(im, predictor, cmap=cv2.COLORMAP_VIRIDIS, base_image=None):
         # Visualizer outputs black for background, but we want the 0 value of
         # the colormap, so we initialize the array with that value
         arr = cv2.applyColorMap(np.zeros((height, width), dtype=np.uint8), cmap)
-    out = Visualizer(
+    out = visualizer(
         alpha=(0.5 if base_image is not None else 1.0), cmap=cmap
     ).visualize(arr, results)
     return out
@@ -109,7 +113,12 @@ class Predictor(BasePredictor):
             default="R_50_FPN_s1x",
         ),
         overlay: bool = Input(
-            description="Overlay the segmentation on the input image"
+            description="Overlay the segmentation on the input image", default=False
+        ),
+        visualizer: str = Input(
+            description="Visualizer to use",
+            choices=["MplContour", "CustomContour", "FineSegmentation", "U", "V"],
+            default="FineSegmentation",
         ),
     ) -> Path:
         """Run a single prediction on the model"""
@@ -133,6 +142,13 @@ class Predictor(BasePredictor):
             self.predictor = DefaultPredictor(cfg)
             self.model = model
 
+        visualizer_map = {
+            "MplContour": DensePoseResultsMplContourVisualizer,
+            "CustomContour": DensePoseResultsCustomContourVisualizer,
+            "FineSegmentation": DensePoseResultsFineSegmentationVisualizer,
+            "U": DensePoseResultsUVisualizer,
+            "V": DensePoseResultsVVisualizer,
+        }
         tempdir = tempfile.mkdtemp()
         # Check if input is image or video using the file mimetype
         mimetype, _ = mimetypes.guess_type(str(input))
@@ -145,6 +161,7 @@ class Predictor(BasePredictor):
             out = densepose(
                 im,
                 self.predictor,
+                visualizer_map[visualizer],
                 base_image=(im if overlay else None),
             )
             cv2.imwrite(out_path, out)
@@ -166,6 +183,7 @@ class Predictor(BasePredictor):
                     out = densepose(
                         cv2_image,
                         self.predictor,
+                        visualizer_map[visualizer],
                         base_image=(cv2_image if overlay else None),
                     )
                     out_frame = av.VideoFrame.from_ndarray(out, format="bgr24")
