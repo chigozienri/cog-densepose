@@ -4,6 +4,7 @@
 import mimetypes
 import os
 import shutil
+import subprocess
 import tempfile
 
 import av
@@ -18,7 +19,7 @@ from densepose.vis.densepose_results import (
 from densepose.vis.extractor import DensePoseResultExtractor
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
-import subprocess
+
 
 def densepose(im, predictor):
     width, height = im.shape[1], im.shape[0]
@@ -36,22 +37,95 @@ def densepose(im, predictor):
     return out
 
 
+model_original_urls = [
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_s1x_legacy/164832157/model_final_d366fa.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_s1x_legacy/164832182/model_final_10af0e.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_s1x/165712039/model_final_162be9.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_s1x/165712084/model_final_c6ab63.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_DL_s1x/165712097/model_final_0ed407.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_DL_s1x/165712116/model_final_844d15.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_WC1_s1x/173862049/model_final_289019.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_WC2_s1x/173861455/model_final_3abe14.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_DL_WC1_s1x/173067973/model_final_b1e525.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_DL_WC2_s1x/173859335/model_final_60fed4.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_WC1_s1x/171402969/model_final_9e47f0.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_WC2_s1x/173860702/model_final_5ea023.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_DL_WC1_s1x/173858525/model_final_f359f3.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_DL_WC2_s1x/173294801/model_final_6e1ed1.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_WC1M_s1x/217144516/model_final_48a9d9.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_WC2M_s1x/216245640/model_final_d79ada.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_DL_WC1M_s1x/216245703/model_final_61971e.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_50_FPN_DL_WC2M_s1x/216245758/model_final_7bfb43.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_WC1M_s1x/216453687/model_final_0a7287.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_WC2M_s1x/216245682/model_final_e354d9.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_DL_WC1M_s1x/216245771/model_final_0ebeb3.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/densepose_rcnn_R_101_FPN_DL_WC2M_s1x/216245790/model_final_de6e7a.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/evolution/densepose_R_50_FPN_DL_WC1M_3x_Atop10P_CA/217578784/model_final_9fe1cc.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/evolution/densepose_R_50_FPN_DL_WC1M_3x_Atop10P_CA_B_uniform/256453729/model_final_241ff5.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/evolution/densepose_R_50_FPN_DL_WC1M_3x_Atop10P_CA_B_uv/256452095/model_final_d689e2.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/evolution/densepose_R_50_FPN_DL_WC1M_3x_Atop10P_CA_B_finesegm/256452819/model_final_cb4ac6.pkl",
+    "https://dl.fbaipublicfiles.com/densepose/evolution/densepose_R_50_FPN_DL_WC1M_3x_Atop10P_CA_B_coarsesegm/256455697/model_final_a6a4bf.pkl",
+]
+
+
+def original_urls_to_modelmap(original_urls):
+    modelmap = {}
+    for url in original_urls:
+        model = url.split("/")[-3]
+        shortname = model.replace("densepose_rcnn_", "").replace("densepose_", "")
+        modelmap[shortname] = {}
+        modelmap[shortname]["name"] = model
+        modelmap[shortname]["replicate_weights_url"] = "/".join(
+            url.replace(
+                "https://dl.fbaipublicfiles.com/",
+                "https://weights.replicate.delivery/default/facebookresearch/",
+            ).split("/")[:-1]
+        )
+        modelmap[shortname]["model_filename"] = url.split("/")[-1]
+        modelmap[shortname]["config_filename"] = url.split("/")[-3] + ".yaml"
+    return modelmap
+
+
+MODELMAP = original_urls_to_modelmap(model_original_urls)
+
+
 class Predictor(BasePredictor):
     def setup(self) -> None:
         """Load the model into memory to make running multiple predictions efficient"""
-        cfg = get_cfg()
-        add_densepose_config(cfg)
-        cfg.merge_from_file(
-            "/detectron2/projects/DensePose/configs/densepose_rcnn_R_50_FPN_s1x.yaml"
-        )
-        cfg.MODEL.WEIGHTS = "/model_final_162be9.pkl"
-        self.predictor = DefaultPredictor(cfg)
+        self.predictor = None
+        self.model = None
 
     def predict(
         self,
         input: Path = Input(description="Input image or video"),
+        model: str = Input(
+            description="DensePose model",
+            choices=list(MODELMAP.keys()),
+            default="R_50_FPN_s1x",
+        ),
     ) -> Path:
         """Run a single prediction on the model"""
+        if model != self.model:
+            os.makedirs(model, exist_ok=True)
+            # import pdb; pdb.set_trace()
+            subprocess.run(
+                [
+                    "pget",
+                    MODELMAP[model]["replicate_weights_url"]
+                    + "/"
+                    + MODELMAP[model]["model_filename"],
+                    f"{model}/{MODELMAP[model]['model_filename']}",
+                ]
+            )
+            cfg = get_cfg()
+            add_densepose_config(cfg)
+            cfg.merge_from_file(
+                f"/detectron2/projects/DensePose/configs/{MODELMAP[model]['config_filename']}"
+            )
+            cfg.MODEL.WEIGHTS = f"{model}/{MODELMAP[model]['model_filename']}"
+            self.predictor = DefaultPredictor(cfg)
+            self.model = model
+
         tempdir = tempfile.mkdtemp()
         # Check if input is image or video using the file mimetype
         mimetype, _ = mimetypes.guess_type(str(input))
@@ -85,7 +159,20 @@ class Predictor(BasePredictor):
             # Re-encode the video to a widely compatible format using ffmpeg
             reencoded_out_path = out_path + ".reencoded.mp4"
             subprocess.check_output(
-                ["ffmpeg", "-i", str(out_path), "-c:v", "libx264", "-preset", "slow", "-crf", "22", "-pix_fmt", "yuv420p", str(reencoded_out_path)]
+                [
+                    "ffmpeg",
+                    "-i",
+                    str(out_path),
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "slow",
+                    "-crf",
+                    "22",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(reencoded_out_path),
+                ]
             )
             shutil.move(reencoded_out_path, out_path)
             return Path(out_path)
