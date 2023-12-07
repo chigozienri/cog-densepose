@@ -107,7 +107,6 @@ class Predictor(BasePredictor):
         """Run a single prediction on the model"""
         if model != self.model:
             os.makedirs(model, exist_ok=True)
-            # import pdb; pdb.set_trace()
             subprocess.run(
                 [
                     "pget",
