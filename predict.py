@@ -101,7 +101,7 @@ class Predictor(BasePredictor):
         self,
         input: Path = Input(description="Input image or video"),
         model: str = Input(
-            description="DensePose model",
+            description="DensePose model. Read about the available models: https://github.com/facebookresearch/detectron2/blob/main/projects/DensePose/doc/DENSEPOSE_IUV.md",
             choices=list(MODELMAP.keys()),
             default="R_50_FPN_s1x",
         ),
