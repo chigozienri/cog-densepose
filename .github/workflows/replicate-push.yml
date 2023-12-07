@@ -17,6 +17,7 @@ jobs:
         with:
           token: ${{ secrets.REPLICATE_API_TOKEN }}
           install-cuda: true
+          cog-version: "v0.8.6"
 
       - name: Push to Replicate
         run: |
