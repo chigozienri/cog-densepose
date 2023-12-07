@@ -21,19 +21,22 @@ from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 
 
-def densepose(im, predictor):
+def densepose(im, predictor, cmap=cv2.COLORMAP_VIRIDIS, base_image=None):
     width, height = im.shape[1], im.shape[0]
 
     with torch.no_grad():
         outputs = predictor(im)["instances"]
 
     results = DensePoseResultExtractor()(outputs)
-    # MagicAnimate uses the Viridis colormap for their training data
-    cmap = cv2.COLORMAP_VIRIDIS
-    # Visualizer outputs black for background, but we want the 0 value of
-    # the colormap, so we initialize the array with that value
-    arr = cv2.applyColorMap(np.zeros((height, width), dtype=np.uint8), cmap)
-    out = Visualizer(alpha=1, cmap=cmap).visualize(arr, results)
+    if base_image is not None:
+        arr = np.array(base_image)
+    else:
+        # Visualizer outputs black for background, but we want the 0 value of
+        # the colormap, so we initialize the array with that value
+        arr = cv2.applyColorMap(np.zeros((height, width), dtype=np.uint8), cmap)
+    out = Visualizer(
+        alpha=(0.5 if base_image is not None else 1.0), cmap=cmap
+    ).visualize(arr, results)
     return out
 
 
@@ -105,6 +108,9 @@ class Predictor(BasePredictor):
             choices=list(MODELMAP.keys()),
             default="R_50_FPN_s1x",
         ),
+        overlay: bool = Input(
+            description="Overlay the segmentation on the input image"
+        ),
     ) -> Path:
         """Run a single prediction on the model"""
         if model != self.model:
@@ -136,7 +142,11 @@ class Predictor(BasePredictor):
             out_path = os.path.join(tempdir, "image_dp_segm.png")
             shutil.copy(input, in_path)
             im = cv2.imread(in_path)
-            out = densepose(im, self.predictor)
+            out = densepose(
+                im,
+                self.predictor,
+                base_image=(im if overlay else None),
+            )
             cv2.imwrite(out_path, out)
             return Path(out_path)
         elif mimetype and mimetype.startswith("video/"):
@@ -153,7 +163,11 @@ class Predictor(BasePredictor):
                 for frame in container.decode(stream):
                     pil_image = frame.to_image()
                     cv2_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-                    out = densepose(cv2_image, self.predictor)
+                    out = densepose(
+                        cv2_image,
+                        self.predictor,
+                        base_image=(cv2_image if overlay else None),
+                    )
                     out_frame = av.VideoFrame.from_ndarray(out, format="bgr24")
                     for packet in stream_out.encode(out_frame):
                         target_container.mux(packet)
